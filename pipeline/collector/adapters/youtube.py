@@ -5,7 +5,10 @@ from pipeline.collector.normalizer import normalize_text
 
 class YouTubeAdapter:
     platform = "youtube"
-    access_level = "official"
+    access_mode = "official_api"
+    cost_level = "free"
+    risk_level = "low"
+    enabled_by_default = True
 
     def collect(self, keyword: str, target_entity: str, limit: int = 50) -> list[RawSocialItem]:
         # scaffold sample. replace with commentThreads.list integration.
@@ -42,4 +45,6 @@ class YouTubeAdapter:
             source_url=f"https://www.youtube.com/watch?v={sample['snippet']['videoId']}&lc={comment['id']}",
             metrics={"like_count": snippet.get("likeCount", 0), "reply_count": sample["snippet"].get("totalReplyCount", 0)},
             raw_payload=sample,
+            collection_method=self.access_mode,
+            access_risk=self.risk_level,
         )]

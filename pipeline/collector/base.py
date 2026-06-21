@@ -27,6 +27,9 @@ class RawSocialItem:
     metrics: dict[str, Any] = field(default_factory=dict)
     raw_payload: dict[str, Any] = field(default_factory=dict)
     content_hash: str = ""
+    collection_method: str = "official_api"
+    access_risk: str = "low"
+    collector_version: str = "v0.1"
 
     def __post_init__(self) -> None:
         if not self.content_hash:
@@ -46,6 +49,9 @@ class RawSocialItem:
 
 class CollectorAdapter(Protocol):
     platform: str
-    access_level: str
+    access_mode: str
+    cost_level: str
+    risk_level: str
+    enabled_by_default: bool
 
     def collect(self, keyword: str, target_entity: str, limit: int = 50) -> list[RawSocialItem]: ...

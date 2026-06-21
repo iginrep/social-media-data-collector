@@ -5,7 +5,10 @@ from pipeline.collector.normalizer import normalize_text
 
 class TwitterAdapter:
     platform = "x"
-    access_level = "limited"
+    access_mode = "automation"
+    cost_level = "free"
+    risk_level = "high"
+    enabled_by_default = False
 
     def collect(self, keyword: str, target_entity: str, limit: int = 50) -> list[RawSocialItem]:
         sample = {
@@ -30,4 +33,6 @@ class TwitterAdapter:
             source_url=f"https://x.com/i/web/status/{sample['id']}",
             metrics=sample.get("public_metrics", {}),
             raw_payload=sample,
+            collection_method=self.access_mode,
+            access_risk=self.risk_level,
         )]
