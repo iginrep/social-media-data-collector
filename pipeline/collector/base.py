@@ -15,8 +15,11 @@ class RawSocialItem:
     keyword: str
     target_entity: str
     text: str
+    root_source_id: str | None = None
     parent_source_id: str | None = None
     conversation_id: str | None = None
+    depth: int = 0
+    relation_type: str | None = None
     author_id: str | None = None
     author_username: str | None = None
     author_display_name: str | None = None

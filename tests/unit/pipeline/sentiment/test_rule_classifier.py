@@ -1,5 +1,8 @@
+import pytest
 from pipeline.sentiment.classifier import classify
 
+
+pytestmark = pytest.mark.unit
 
 def test_classify_positive():
     result = classify("BIONS sekarang lancar dan cepat")

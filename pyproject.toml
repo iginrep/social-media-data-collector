@@ -34,3 +34,8 @@ exclude = ["data*", "db*", "docs*", "tests*"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+  "unit: fast isolated tests for pure functions and adapter parsing",
+  "integration: tests that cross module boundaries or exercise HTTP/API wiring",
+  "live: opt-in tests that call external public services"
+]
