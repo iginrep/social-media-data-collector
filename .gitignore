@@ -1,0 +1,19 @@
+# python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.env
+*.egg-info/
+
+# node
+node_modules/
+.next/
+dist/
+
+# data outputs
+data/raw/*
+data/processed/*
+data/labeled/*
+data/exports/*
+!data/**/.gitkeep

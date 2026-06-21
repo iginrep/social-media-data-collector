@@ -1,0 +1,1 @@
+{"scripts":{"dev":"next dev","build":"next build"},"dependencies":{"next":"latest","react":"latest","react-dom":"latest","recharts":"latest","@tanstack/react-table":"latest"},"devDependencies":{"typescript":"latest","@types/react":"latest","@types/node":"latest"}}
