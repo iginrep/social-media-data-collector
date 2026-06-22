@@ -6,6 +6,7 @@ db = db.getSiblingDB('bni_bions_sentiment');
   'keywords',
   'schedules',
   'collection_runs',
+  'collection_checkpoints',
   'social_items',
   'sentiment_jobs',
   'sentiment_results',
@@ -42,6 +43,10 @@ db.collection_runs.createIndex({ keywordId: 1, startedAt: -1 });
 db.collection_runs.createIndex({ status: 1, startedAt: -1 });
 db.collection_runs.createIndex({ scheduleId: 1, startedAt: -1 });
 
+// collection_checkpoints
+db.collection_checkpoints.createIndex({ platform: 1, windowStart: 1, windowEnd: 1 }, { unique: true });
+db.collection_checkpoints.createIndex({ platform: 1, status: 1, windowEnd: -1 });
+
 // social_items
 db.social_items.createIndex(
   { platform: 1, sourceType: 1, sourceId: 1 },
@@ -60,7 +65,10 @@ db.social_items.createIndex({ 'sentiment.topics': 1, postedAt: -1 });
 db.social_items.createIndex({ 'processing.analysisStatus': 1, collectedAt: 1 });
 db.social_items.createIndex({ 'metrics.rating': 1, postedAt: -1 });
 db.social_items.createIndex({ conversationId: 1, postedAt: 1 });
-db.social_items.createIndex({ 'content.text': 'text', 'content.cleanedText': 'text' });
+db.social_items.createIndex(
+  { 'content.text': 'text', 'content.cleanedText': 'text' },
+  { default_language: 'none', language_override: 'none' }
+);
 
 // sentiment_jobs / results
 db.sentiment_jobs.createIndex({ status: 1, startedAt: -1 });
