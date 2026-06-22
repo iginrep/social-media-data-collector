@@ -7,88 +7,52 @@ Two modes:
   - rule_based: full pipeline (clean → normalize → stopwords → stemming)
   - indobert: lighter pipeline (clean → normalize → tokenizer handles the rest)
 
-IndoBERT was pre-trained on formal Indonesian. Slang normalization is critical.
-Stopword removal and stemming HURT IndoBERT performance — skip them for that mode.
-
-Libraries used:
+Libraries used (no hardcoded lists):
+  - indoNLP: slang normalization (3300+ entries), word elongation, HTML/URL removal
   - NLTK: Indonesian stopword list (758 words, corpus-based)
   - Sastrawi: Indonesian stemmer (rule-based suffix/prefix stripping)
+
+Domain-specific normalization loaded from domain.json (app/trading terms).
+Sentiment keepers also loaded from domain.json.
 """
 
+import json
 import re
 import unicodedata
+from pathlib import Path
 from typing import Literal
 
 # ---------------------------------------------------------------------------
-# 1. SLANG / INFORMAL → FORMAL MAPPING
+# 1. CONFIGURATION (loaded from domain.json — no hardcodes)
 # ---------------------------------------------------------------------------
 
-SLANG_MAP: dict[str, str] = {
-    # negation
-    "gk": "tidak", "ga": "tidak", "gak": "tidak", "nggak": "tidak",
-    "g": "tidak", "tdk": "tidak", "enggak": "tidak", "kagak": "tidak",
-    "blm": "belum", "blum": "belum", "belom": "belum",
-    "jgn": "jangan", "jngn": "jangan",
-    # common informal
-    "yg": "yang", "utk": "untuk", "utuk": "untuk", "buat": "untuk",
-    "bgt": "banget", "bngt": "banget", "bngtt": "banget",
-    "bener": "benar", "bnr": "benar",
-    "aja": "saja", "aj": "saja",
-    "dong": "saja", "sih": "saja",
-    "klo": "kalau", "kalo": "kalau", "kl": "kalau",
-    "tp": "tapi", "tpi": "tapi",
-    "sm": "sama",
-    "gw": "saya", "gue": "saya", "ane": "saya",
-    "lu": "kamu", "lo": "kamu", "loe": "kamu",
-    "dr": "dari", "dri": "dari",
-    "pd": "pada",
-    "bs": "bisa",
-    "udh": "sudah", "udah": "sudah", "sdh": "sudah",
-    "lg": "lagi", "lgi": "lagi",
-    "dgn": "dengan", "dg": "dengan",
-    "krn": "karena", "karna": "karena",
-    # app-specific (BNI/BIONS)
-    "login": "masuk", "log in": "masuk",
-    "loading": "memuat", "ld": "memuat",
-    "error": "galat", "eror": "galat",
-    "crash": "macet", "force close": "macet",
-    "bug": "kesalahan",
-    "lemot": "lambat", "lambat": "lambat",
-    "nyangkut": "tertahan", "stuck": "tertahan",
-    "reject": "ditolak",
-    "cs": "layanan pelanggan", "customer service": "layanan pelanggan",
-    # intensifiers / fillers
-    "banget": "sekali", "bgt": "sekali",
-    "sering": "sering",
-    "parah": "buruk", "parahh": "buruk",
-    "jelek": "buruk", "jlek": "buruk",
-    "bagus": "bagus", "bgus": "bagus",
-    "mantap": "bagus", "mantul": "bagus",
-    "ok": "bagus", "oke": "bagus", "okk": "bagus",
-    "puas": "puas",
-    "ribet": "rumit", "ribettt": "rumit",
-    "susah": "sulit", "susaah": "sulit",
-    "gagal": "gagal",
-    "lancar": "lancar",
-    "cepat": "cepat", "cpt": "cepat",
-    "mudah": "mudah",
-    "responsif": "responsif", "respon": "responsif",
-}
+_DOMAIN_CONFIG: dict | None = None
+_DOMAIN_DIR = Path(__file__).parent
 
-# Words to keep even if in stopword list (sentiment-bearing)
-SENTIMENT_KEEPERS = {
-    "tidak", "bukan", "belum", "jangan", "kurang",
-    "bagus", "buruk", "jelek", "parah", "mantap", "puas",
-    "cepat", "lambat", "lemot", "lancar", "susah", "mudah",
-    "gagal", "error", "crash", "bug",
-    "suka", "senang", "kesal", "kecewa",
-    "sering", "selalu", "kadang",
-    "sekali", "sangat", "amat", "paling",
-}
+
+def _load_domain_config() -> dict:
+    """Load domain configuration from domain.json. Cached after first call."""
+    global _DOMAIN_CONFIG
+    if _DOMAIN_CONFIG is not None:
+        return _DOMAIN_CONFIG
+    config_path = _DOMAIN_DIR / "domain.json"
+    with open(config_path, encoding="utf-8") as f:
+        _DOMAIN_CONFIG = json.load(f)
+    return _DOMAIN_CONFIG
+
+
+def _get_domain_normalization() -> dict[str, str]:
+    """App/trading-specific term normalization (e.g., lemot → lambat)."""
+    return _load_domain_config()["domain_normalization"]
+
+
+def _get_sentiment_keepers() -> set[str]:
+    """Sentiment-bearing words to preserve from stopword removal."""
+    return set(_load_domain_config()["sentiment_keepers"])
 
 
 # ---------------------------------------------------------------------------
-# 2. CLEANING
+# 2. CLEANING (standard regex patterns — no library covers all 5)
 # ---------------------------------------------------------------------------
 
 _URL_RE = re.compile(r"https?://\S+|www\.\S+")
@@ -109,7 +73,7 @@ _EMOJI_RE = re.compile(
 _MENTION_RE = re.compile(r"@\w+")
 _HASH_RE = re.compile(r"#(\w+)")
 _MULTI_SPACE_RE = re.compile(r"\s+")
-_NON_ALPHA_RE = re.compile(r"[^a-z0-9\s]")  # after lowercasing
+_NON_ALPHA_RE = re.compile(r"[^a-z0-9\s]")
 _NUMBER_RE = re.compile(r"\b\d+\b")
 
 
@@ -167,13 +131,39 @@ def remove_accents(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 3. NORMALIZATION (Indonesian-specific)
+# 3. NORMALIZATION (library-backed + domain config)
 # ---------------------------------------------------------------------------
 
 def normalize_slang(text: str) -> str:
-    """Map informal/slang words to formal Indonesian."""
+    """Map informal/slang words to formal Indonesian.
+
+    Uses indoNLP's replace_slang() for 3300+ generic entries,
+    then applies domain.json overrides for app/trading terms.
+    """
+    from indoNLP.preprocessing import replace_slang as _indo_slang
+
+    # indoNLP works on original case, we lowercase after
+    text = _indo_slang(text)
+    text = text.lower()
+
+    # domain-specific overrides (app/trading terms not in indoNLP)
+    domain_map = _get_domain_normalization()
     words = text.split()
-    return " ".join(SLANG_MAP.get(w, w) for w in words)
+    return " ".join(domain_map.get(w, w) for w in words)
+
+
+def normalize_word_elongation(text: str) -> str:
+    """Fix word elongation using indoNLP + regex fallback.
+
+    indoNLP handles: 'okkkk' → 'ok', 'burukk' → 'buruk', 'bukaa' → 'buka'
+    Regex fallback: 'baguuuus' → 'bagus' (collapse all repeated chars to single)
+    """
+    from indoNLP.preprocessing import replace_word_elongation as _indo_elong
+
+    text = _indo_elong(text)
+    # regex fallback: collapse any run of 2+ identical chars to 1
+    text = re.sub(r"(.)\1+", r"\1", text)
+    return text
 
 
 def normalize_unicode(text: str) -> str:
@@ -213,7 +203,7 @@ def _get_stopwords() -> set[str]:
 def remove_stopwords(text: str, extra_keep: set[str] | None = None) -> str:
     """Remove Indonesian stopwords (NLTK corpus), keeping sentiment-bearing words."""
     stopwords = _get_stopwords()
-    keep = SENTIMENT_KEEPERS | (extra_keep or set())
+    keep = _get_sentiment_keepers() | (extra_keep or set())
     words = text.split()
     return " ".join(w for w in words if w in keep or w not in stopwords)
 
@@ -277,7 +267,6 @@ def preprocess(
     text = remove_emojis(text)
     text = remove_mentions(text)
     text = remove_hashtag_symbol(text)
-    text = normalize_repeated_chars(text)
     text = normalize_unicode(text)
     text = remove_accents(text)
     text = remove_special_chars(text)
@@ -288,7 +277,9 @@ def preprocess(
     if not text:
         return ""
 
-    # --- Stage 2: Slang normalization (always) ---
+    # --- Stage 2: Normalization (library-backed) ---
+    # indoNLP: word elongation + slang normalization
+    text = normalize_word_elongation(text)
     text = normalize_slang(text)
 
     # --- Stage 3: Mode-specific ---

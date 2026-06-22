@@ -1,0 +1,35 @@
+{
+  "domain_normalization": {
+    "lemot": "lambat",
+    "loading": "memuat",
+    "loadingnya": "memuat",
+    "error": "galat",
+    "eror": "galat",
+    "crash": "macet",
+    "force close": "macet",
+    "bug": "kesalahan",
+    "login": "masuk",
+    "log in": "masuk",
+    "ribet": "rumit",
+    "ribettt": "rumit",
+    "susah": "sulit",
+    "susaah": "sulit",
+    "nyangkut": "tertahan",
+    "stuck": "tertahan",
+    "reject": "ditolak",
+    "cs": "layanan pelanggan",
+    "customer service": "layanan pelanggan",
+    "ipo": "ipo",
+    "bions": "bions"
+  },
+  "sentiment_keepers": [
+  "tidak", "bukan", "belum", "jangan", "kurang",
+  "enggak", "gak", "gk",
+    "bagus", "buruk", "jelek", "parah", "mantap", "puas",
+    "cepat", "lambat", "lemot", "lancar", "susah", "mudah",
+    "gagal", "error", "crash", "bug",
+    "suka", "senang", "kesal", "kecewa",
+    "sering", "selalu", "kadang",
+    "sekali", "sangat", "amat", "paling"
+  ]
+}
