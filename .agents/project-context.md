@@ -81,22 +81,33 @@ Reasons:
 
 ```txt
 apps/api/app/                 FastAPI application
-pipeline/collector/           adapters, normalization, dedupe
+pipeline/collector/           adapters, normalization, dedupe, backfill runner
+pipeline/storage/             social_items persistence, checkpoint store
 pipeline/sentiment/           preprocessing, rules, classifier hooks
 pipeline/scheduler/           APScheduler jobs
 pipeline/export/              CSV/XLSX export
-db/                           Mongo init and schema notes
+db/                           Mongo init, indexes, seed data
 docs/                         human docs and research
 .agents/                      AI-agent context
 ```
 
 ## Database
-
 MongoDB database: `bni_bions_sentiment`.
+Connection: `mongodb://localhost:27017`.
 
 Mongo init file: `db/mongo-init.js`.
 
-Primary normalized collection should use `social_items` or equivalent canonical items, not platform-specific one-off collections.
+Primary collections:
+
+```txt
+social_items               canonical normalized items (app reviews + comments)
+collection_checkpoints     backfill window status (complete/partial)
+collection_runs            scheduled run history
+keywords                   monitored keywords
+sentiment_results          sentiment classification outputs
+```
+
+See `docs/data-contract.md` for full schema.
 
 ## Source docs
 

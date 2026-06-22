@@ -54,7 +54,8 @@ Core modules:
 | --- | --- |
 | `apps/api/` | FastAPI service for health, comments, sentiment, exports, keywords, schedules. |
 | `apps/dashboard/` | Next.js dashboard scaffold. |
-| `pipeline/collector/` | Platform adapters, canonical data model, normalization, dedupe. |
+| `pipeline/collector/` | Platform adapters, canonical data model, normalization, dedupe, backfill runner. |
+| `pipeline/storage/` | Social items persistence, checkpoint store for backfill. |
 | `pipeline/sentiment/` | Text preprocessing, rule-based sentiment, future model hooks. |
 | `pipeline/scheduler/` | Scheduled collector/analyzer jobs. |
 | `pipeline/export/` | CSV/XLSX export helpers. |
@@ -69,6 +70,7 @@ cd /home/hp/dev/work/bni-bions-sentiment-analysis
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -e '.[dev]'
+make mongo-up
 pytest -q
 ```
 
@@ -85,6 +87,7 @@ make collect
 make analyze
 make export
 make api
+make backfill
 ```
 
 Equivalent direct commands:
@@ -113,6 +116,13 @@ APP_TIMEZONE=Asia/Jakarta
 SENTIMENT_METHOD=rule_based
 MONGODB_URI=mongodb://localhost:27017
 MONGODB_DATABASE=bni_bions_sentiment
+```
+
+Local MongoDB:
+
+```bash
+make mongo-up
+make mongo-status
 ```
 
 ## Safe operating defaults
@@ -203,6 +213,8 @@ Step-by-step guides for running each collector.
 | [08 - Stockbit](docs/runbook/08-stockbit.md) | Collect discussions (public scrape, high risk) |
 | [09 - Run All](docs/runbook/09-run-all.md) | Run all collectors at once |
 | [10 - Troubleshooting](docs/runbook/10-troubleshooting.md) | Common errors and fixes |
+| [11 - Docker MongoDB](docs/runbook/11-docker-mongodb.md) | Local MongoDB infra for collector storage |
+| [12 - Backfill Retention](docs/runbook/12-backfill-retention.md) | Fill 1 year of historical collector data into MongoDB |
 
 ## Development workflow
 
@@ -223,8 +235,8 @@ git diff --staged | grep -Ei 'password|secret|api[_-]?key|token|cookie|authoriza
 
 ## Current limitations
 
-- Google Play/App Store/YouTube collectors are the first implementation priority.
-- Risky social sources are intentionally disabled.
+- Backfill works for Google Play, App Store, and YouTube. X/Instagram/Threads/TikTok/Stockbit require historical adapter implementation.
+- Risky social sources are intentionally disabled for live collection.
 - Sentiment is currently rule-based and should be improved with labeled Indonesian finance/app-review examples.
 - `db/schema.sql` and `db/seed_keywords.sql` are legacy SQL references while the active database target is MongoDB.
 

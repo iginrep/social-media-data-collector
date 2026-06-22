@@ -40,6 +40,12 @@ Each adapter implements:
 collect(keyword: str, target_entity: str, limit: int = 50) -> list[RawSocialItem]
 ```
 
+Adapters supporting historical backfill also implement:
+
+```python
+collect_backfill(keyword: str, target_entity: str, since: datetime, until: datetime, limit: int = 50) -> list[RawSocialItem]
+```
+
 Adapter metadata:
 
 ```txt
@@ -52,11 +58,11 @@ enabled_by_default
 
 ## Approved enabled sources
 
-| Adapter | Source | Default |
-| --- | --- | --- |
-| `google_play.py` | BIONS Google Play reviews | enabled |
-| `app_store.py` | BIONS Apple App Store reviews | enabled |
-| `youtube.py` | approved BNI/BIONS YouTube channels | enabled with `YOUTUBE_API_KEY` |
+| Adapter | Source | Default | Backfill |
+| --- | --- | --- | --- |
+| `google_play.py` | BIONS Google Play reviews | enabled | yes |
+| `app_store.py` | BIONS Apple App Store reviews | enabled | yes |
+| `youtube.py` | approved BNI/BIONS YouTube channels | enabled with `YOUTUBE_API_KEY` | yes |
 
 ## Disabled risky sources
 
@@ -70,6 +76,25 @@ enabled_by_default
 
 Do not enable disabled adapters without explicit current-task approval.
 
+## Backfill
+
+Run historical backfill with checkpoint-based resume:
+
+```bash
+# dry-run (no writes)
+python -m pipeline.collector.backfill --dry-run --retention-days 365 --window-days 14
+
+# live backfill
+python -m pipeline.collector.backfill --retention-days 365 --window-days 14 --limit-per-window 5 --recent-overlap-days 7
+
+# force full re-collect
+python -m pipeline.collector.backfill --refetch-existing-windows
+```
+
+Checkpoint store: `pipeline/storage/backfill_checkpoints.py` → `collection_checkpoints` collection.
+
+Social items persistence: `pipeline/storage/social_items.py` → `social_items` collection.
+
 ## Stop conditions
 
 Stop on 401/403, 429, CAPTCHA, login wall, quota exhaustion, private/deleted content, or repeated server failures.
@@ -78,5 +103,5 @@ Stop on 401/403, 429, CAPTCHA, login wall, quota exhaustion, private/deleted con
 
 ```bash
 . .venv/bin/activate
-pytest -q tests/test_normalizer.py tests/test_dedupe.py
+pytest -q tests/unit/pipeline/collector/
 ```

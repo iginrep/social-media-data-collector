@@ -123,6 +123,59 @@ totalReplyCount -> metrics.reply_count
 publishedAt/updatedAt -> posted_at/raw_payload
 ```
 
+## Backfill contract
+
+Adapters that support historical collection should also implement `collect_backfill()`:
+
+```python
+def collect_backfill(
+    self,
+    keyword: str,
+    target_entity: str,
+    since: datetime,
+    until: datetime,
+    limit: int = 50,
+) -> list[RawSocialItem]: ...
+```
+
+This is optional. Adapters without it are marked `unsupported` by the backfill runner.
+
+### Rate-limit and quota safety
+
+Backfill supports per-run request budgets and delays:
+
+```txt
+YOUTUBE_BACKFILL_MAX_REQUESTS          per-run hard cap (default: no limit)
+YOUTUBE_BACKFILL_REQUEST_DELAY_SECONDS delay between API calls (default: 0)
+```
+
+When the budget is exhausted, the adapter raises `CollectorStopped`. The runner marks the window as `partial` and exits gracefully. No data is lost; rerun resumes from checkpoint.
+
+### Checkpoint store
+
+Backfill uses `BackfillCheckpointStore` (Protocol in `backfill.py`) backed by `MongoBackfillCheckpointStore` in `pipeline/storage/backfill_checkpoints.py`.
+
+```txt
+collection_checkpoints
+  platform          string
+  windowStart       datetime (ISO)
+  windowEnd         datetime (ISO)
+  status            "complete" | "partial"
+  collectedCount    int
+  insertedCount     int
+  errorMessage      string | null
+  createdAt         datetime
+  completedAt       datetime | null
+```
+
+Unique index: `platform + windowStart + windowEnd`.
+
+Behavior:
+- complete old windows → skip API call
+- partial windows → resume
+- recent overlap (default 7 days) → re-collect
+- `--refetch-existing-windows` overrides all checkpoints
+
 ## Dedupe
 
 Priority:

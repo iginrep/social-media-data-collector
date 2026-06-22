@@ -34,6 +34,37 @@ node --check db/mongo-init.js
 
 9. Summarize changed files, test output, risks.
 
+## Backfill workflow
+
+1. Implement `collect_backfill()` on the adapter following the backfill contract in `.agents/collector-contract.md`.
+2. Add unit tests for backfill normalization (no live network).
+3. Add rate-limit/quota safety tests if adapter uses paid APIs.
+4. Verify the adapter appears in `remaining_platform_adapters()` output.
+5. Run backfill dry-run first:
+
+```bash
+.venv/bin/python -m pipeline.collector.backfill --dry-run --retention-days 365 --window-days 14
+```
+
+6. Run live backfill with safe defaults:
+
+```bash
+.venv/bin/python -m pipeline.collector.backfill --retention-days 365 --window-days 14 --limit-per-window 5 --recent-overlap-days 7
+```
+
+7. Verify MongoDB state:
+
+```bash
+.venv/bin/python -c "
+from apps.api.app.db import get_database
+db = get_database()
+print(db.social_items.count_documents({}))
+print(db.collection_checkpoints.count_documents({}))
+"
+```
+
+8. Update `docs/runbook/12-backfill-retention.md` if platform support changed.
+
 ## API workflow
 
 1. Keep route response shapes stable.

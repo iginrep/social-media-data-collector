@@ -106,6 +106,27 @@ Aggregates/sentiment retention: 365 days by default.
 
 Support deletion by platform + source id/hash.
 
+## Backfill safety
+
+```yaml
+backfill:
+  default_retention_days: 365
+  default_window_days: 14
+  default_recent_overlap_days: 7
+  checkpoint_skip_complete_old_windows: true
+  youtube_backfill_max_requests: set per run (default: no limit)
+  youtube_backfill_request_delay_seconds: 2
+  dry_run_writes_no_checkpoints: true
+  stop_on_quota_exhaustion: true
+```
+
+Checkpoint behavior:
+- complete old windows → skip API (no wasted calls)
+- partial windows → resume from last checkpoint
+- recent overlap (7d default) → re-collect to catch late reviews
+- `--refetch-existing-windows` forces full re-run
+- `--dry-run` collects and reports without writing checkpoints or data
+
 ## Git safety
 
 Never commit:
