@@ -1,80 +1,119 @@
-# Instagram Comments Collector
+# Instagram Collector
 
-Two modes available:
-- **public HTTP (free, no key):** fetches post metadata from public Instagram URLs
-- **Graph API (needs token):** fetches comments on specific media posts
+Two official lanes available:
+- owned content comments: comments and replies under media IDs you provide
+- hashtag discovery: public media for approved hashtags, then comments under discovered media
+
+Public HTTP helper still exists for metadata-only experiments, but it cannot fetch comments.
 
 ## What it collects
 
-### public HTTP mode
-- Post caption/text from JSON-LD metadata
-- Author username
-- Like count (if available in metadata)
-
-### Graph API mode
+### owned content comments
 - Comment text, author username, timestamp
 - Reply threads on comments
-- Full conversation structure
+- Flat thread fields: `root_source_id`, `parent_source_id`, `depth`, `relation_type`
+
+### hashtag discovery
+- Public media tagged with configured hashtags
+- Caption, permalink, media type, timestamp, comment count, like count
+- Comments and replies under discovered media
 
 ## Prerequisites
 
-- Virtual environment activated (see [Prerequisites](00-prerequisites.md))
+- Virtual environment activated. See [Prerequisites](00-prerequisites.md)
+- Instagram Business or Creator account connected to a Facebook Page
+- User access token with needed Instagram permissions
 
-### Graph API mode (recommended)
+## Env vars
 
-- `INSTAGRAM_GRAPH_ACCESS_TOKEN` set in `.env`
-- `INSTAGRAM_MEDIA_IDS` set in `.env` (comma-separated media IDs)
+```env
+INSTAGRAM_GRAPH_ACCESS_TOKEN=***
 
-### How to get an Instagram Graph API token
+# lane 1. owned content comments
+INSTAGRAM_MEDIA_IDS=1789012345678901234,1789012345678905678
 
-1. Go to [developers.facebook.com](https://developers.facebook.com/)
-2. Create an **App** -> select **Business** type
-3. Add the **Instagram Graph API** product
-4. Go to **Graph API Explorer** -> generate a token with `instagram_basic` and `instagram_manage_comments` permissions
-5. Find your media IDs using the Graph API:
-   ```
-   GET /me/media?fields=id,caption,timestamp&access_token=YOUR_TOKEN
-   ```
-6. Add to `.env`:
-   ```
-   INSTAGRAM_GRAPH_ACCESS_TOKEN=***
-   INSTAGRAM_MEDIA_IDS=1789012345678901234,1789012345678905678
-   ```
-
-**Important:** The Instagram Graph API requires a Facebook Page connected to an Instagram Business or Creator account. Personal Instagram accounts cannot use the Graph API.
-
-### public HTTP mode (limited)
-
-No env vars needed. Provide Instagram post URLs. This only extracts post metadata from the page HTML -- it cannot fetch comments.
-
-## Run it
-
-### Graph API mode
-
-```bash
-python3 -m pipeline.collector.adapters.instagram
+# lane 2. hashtag discovery
+INSTAGRAM_IG_USER_ID=17841405309211844
+INSTAGRAM_HASHTAG_QUERIES=BIONS,BNISEKURITAS
 ```
 
-Or use the runner:
+At least one lane must be configured:
+- `INSTAGRAM_MEDIA_IDS`
+- or `INSTAGRAM_IG_USER_ID` + `INSTAGRAM_HASHTAG_QUERIES`
+
+## How to get token and IDs
+
+1. Go to `https://developers.facebook.com/`
+2. Create/select a Business app
+3. Add Instagram Graph API
+4. Generate a token in Graph API Explorer
+5. Add permissions needed for your lane:
+   - owned comments: `instagram_basic`, `instagram_manage_comments`
+   - hashtag discovery: `instagram_basic` plus Instagram Public Content Access approval
+6. Find media IDs:
+
+```txt
+GET /me/media?fields=id,caption,timestamp
+```
+
+7. Find Instagram user ID if needed:
+
+```txt
+GET /me/accounts
+GET /{page_id}?fields=instagram_business_account
+```
+
+## How hashtag lane works
+
+For each query in `INSTAGRAM_HASHTAG_QUERIES`:
+
+```txt
+GET /{IG_USER_ID}/ig_hashtag_search?user_id={IG_USER_ID}&q=BIONS
+GET /{HASHTAG_ID}/recent_media?user_id={IG_USER_ID}&fields=id,caption,media_type,permalink,timestamp,comments_count,like_count
+GET /{MEDIA_ID}/comments?fields=id,text,timestamp,username,replies{id,text,timestamp,username}
+```
+
+Source: `https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-hashtag/recent-media`
+
+Limits:
+- only public photos/videos
+- recent media only covers media within 24h of query time
+- max 50 results per page
+- max 30 unique hashtags per 7 days
+- `username` is not available on hashtag media results
+
+## Run it
 
 ```bash
 python3 -m pipeline.collector.run
 ```
 
-### public HTTP mode
+Or from Python:
 
 ```python
 from pipeline.collector.adapters.instagram import InstagramAdapter
-from pipeline.collector.web_extract import fetch_public_html
 
-# This extracts post metadata only (no comments)
-url = "https://www.instagram.com/p/ABC123/"
-html = fetch_public_html(url)
+rows = InstagramAdapter().collect("bions", "bions", limit=50)
 ```
 
-## What you will see
+## Output examples
 
-Graph API comment:
+Hashtag media row:
+
+```json
+{
+  "platform": "instagram",
+  "source_type": "post",
+  "source_id": "1789012345678901234",
+  "root_source_id": "1789012345678901234",
+  "depth": 0,
+  "relation_type": "mention",
+  "keyword": "BIONS",
+  "collection_method": "official_instagram_hashtag_search"
+}
+```
+
+Comment row:
 
 ```json
 {
@@ -84,14 +123,11 @@ Graph API comment:
   "root_source_id": "1789012345678901234",
   "depth": 1,
   "relation_type": "comment",
-  "text": "BIONS mantap!",
-  "author_username": "user123",
-  "posted_at": "2025-01-15T10:30:00+00:00",
   "collection_method": "official_graph_api"
 }
 ```
 
-Reply to a comment:
+Reply row:
 
 ```json
 {
@@ -102,26 +138,21 @@ Reply to a comment:
   "parent_source_id": "1789012345678909999",
   "depth": 2,
   "relation_type": "reply",
-  "text": "setuju banget",
   "collection_method": "official_graph_api"
 }
 ```
-
-## How to verify it worked
-
-- With Graph API token: you should see comments and replies on the specified media IDs
-- Without token: only post metadata from public URLs (no comments)
 
 ## Troubleshooting
 
 | Problem | Fix |
 | --- | --- |
-| `INSTAGRAM_GRAPH_ACCESS_TOKEN missing` | Add the token to `.env` |
-| `INSTAGRAM_MEDIA_IDS missing` | Add media IDs to `.env`. Use Graph API Explorer to find them |
-| 401 Unauthorized | Token expired. Generate a new one in Graph API Explorer |
-| 400 Bad Request | Media ID may be invalid. Verify with Graph API Explorer |
-| Empty comments | The post may have no comments, or the token lacks `instagram_manage_comments` permission |
-| Personal account error | Must use Business or Creator account connected to a Facebook Page |
+| `INSTAGRAM_GRAPH_ACCESS_TOKEN missing` | Add token to `.env` |
+| `INSTAGRAM_MEDIA_IDS or INSTAGRAM_HASHTAG_QUERIES missing` | Configure at least one lane |
+| `INSTAGRAM_IG_USER_ID missing` | Required for hashtag discovery |
+| 401 Unauthorized | Token expired or invalid |
+| 403 Forbidden | Permission or app approval missing |
+| 429 Rate limit | Stop and retry later |
+| Empty hashtag results | No recent public media, hashtag blocked, or query too narrow |
 
 ---
 

@@ -1,91 +1,114 @@
-# Threads Comments Collector
+# Threads Collector
 
-Two modes available:
-- **public HTTP (free, no key):** fetches post metadata from public Threads URLs
-- **Threads API (needs token):** fetches full conversation threads
+Two official lanes available:
+- owned thread conversations: full conversation for media IDs you provide
+- keyword search: public Threads posts matching configured keywords
+
+Public HTTP helper still exists for metadata-only experiments, but it cannot fetch replies.
 
 ## What it collects
 
-### public HTTP mode
-- Post text from JSON-LD metadata
-- Author username
+### owned thread conversations
+- Original post plus replies
+- Native tree fields from Threads API: `root_post`, `replied_to`, `is_reply`
+- Normalized flat thread fields: `root_source_id`, `parent_source_id`, `depth`, `relation_type`
 
-### Threads API mode
-- Full conversation: original post + all replies
-- Thread structure (root post, reply-to relationships)
-- Timestamps, author usernames
+### keyword search
+- Public posts matching keywords
+- Text, username, permalink, timestamp, media type
+- `has_replies`, `is_quote_post`, `is_reply` metadata
 
 ## Prerequisites
 
-- Virtual environment activated (see [Prerequisites](00-prerequisites.md))
+- Virtual environment activated. See [Prerequisites](00-prerequisites.md)
+- Threads API access token
 
-### Threads API mode (recommended)
+## Env vars
 
-- `THREADS_ACCESS_TOKEN` set in `.env`
-- `THREADS_MEDIA_IDS` set in `.env` (comma-separated media IDs)
+```env
+THREADS_ACCESS_TOKEN=***
 
-### How to get a Threads API token
+# lane 1. owned conversations
+THREADS_MEDIA_IDS=1789012345678901234,1789012345678905678
 
-1. Go to [developers.facebook.com](https://developers.facebook.com/)
-2. Create an **App** -> select **Business** type
-3. Add the **Threads API** product
-4. Go to **Graph API Explorer** -> select your app
-5. Generate a token with `threads_basic` and `threads_read_replies` permissions
-6. Find media IDs:
-   ```
-   GET /me/threads?fields=id,caption,timestamp&access_token=YOUR_TOKEN
-   ```
-7. Add to `.env`:
-   ```
-   THREADS_ACCESS_TOKEN=***
-   THREADS_MEDIA_IDS=1789012345678901234
-   ```
-
-### public HTTP mode (limited)
-
-No env vars needed. Provide Threads post URLs. Only extracts post metadata -- no replies.
-
-## Run it
-
-### Threads API mode
-
-```bash
-python3 -m pipeline.collector.adapters.threads
+# lane 2. public keyword search
+THREADS_SEARCH_QUERIES=BIONS,BNI Sekuritas,BIONS error
 ```
 
-Or use the runner:
+At least one lane must be configured:
+- `THREADS_MEDIA_IDS`
+- or `THREADS_SEARCH_QUERIES`
+
+## Permissions
+
+- `threads_basic`: required for Threads API calls
+- `threads_read_replies`: needed for conversation/replies lane
+- `threads_keyword_search`: needed for public keyword search
+
+Without `threads_keyword_search` approval, search only covers posts owned by the authenticated user. After approval, public posts are searchable.
+
+## How keyword lane works
+
+For each query in `THREADS_SEARCH_QUERIES`:
+
+```txt
+GET https://graph.threads.net/v1.0/keyword_search
+  ?q=BIONS
+  &search_type=RECENT
+  &fields=id,text,media_type,permalink,timestamp,username,has_replies,is_quote_post,is_reply
+  &limit=50
+```
+
+Source: `https://developers.facebook.com/docs/threads/keyword-search/`
+
+Useful params supported by API:
+- `q`: required keyword
+- `search_type`: `TOP` or `RECENT`
+- `search_mode`: `KEYWORD` or `TAG`
+- `media_type`: `TEXT`, `IMAGE`, `VIDEO`
+- `since`, `until`: time bounds
+- `limit`: default 25, max 100
+- `author_username`: exact username filter without `@`
+
+Limits:
+- 2,200 queries per rolling 24h per user across apps
+- no-result queries do not count
+- sensitive/offensive queries may return empty array
+- `owner` field excluded
+
+## Run it
 
 ```bash
 python3 -m pipeline.collector.run
 ```
 
-### public HTTP mode
+Or from Python:
 
 ```python
-from pipeline.collector.web_extract import fetch_public_html
+from pipeline.collector.adapters.threads import ThreadsAdapter
 
-url = "https://www.threads.net/@user/post/ABC123"
-html = fetch_public_html(url)
+rows = ThreadsAdapter().collect("bions", "bions", limit=50)
 ```
 
-## What you will see
+## Output examples
 
-Original post:
+Keyword search post:
 
 ```json
 {
   "platform": "threads",
   "source_type": "post",
-  "source_id": "1789012345678901234",
-  "root_source_id": "1789012345678901234",
+  "source_id": "1234567890",
+  "root_source_id": "1234567890",
+  "conversation_id": "1234567890",
   "depth": 0,
-  "text": "fitur baru BIONS keren banget",
-  "author_username": "bni1946",
-  "collection_method": "official_threads_api"
+  "relation_type": "mention",
+  "keyword": "BIONS",
+  "collection_method": "official_threads_keyword_search"
 }
 ```
 
-Reply:
+Conversation reply:
 
 ```json
 {
@@ -93,28 +116,24 @@ Reply:
   "source_type": "reply",
   "source_id": "1789012345678909999",
   "root_source_id": "1789012345678901234",
-  "replied_to": "1789012345678901234",
+  "parent_source_id": "1789012345678901234",
   "depth": 1,
   "relation_type": "reply",
-  "text": "mantap emang",
-  "author_username": "user456"
+  "collection_method": "official_threads_api"
 }
 ```
-
-## How to verify it worked
-
-- With API token: you should see the full conversation tree for each media ID
-- Without token: only post metadata from public URLs (no replies)
 
 ## Troubleshooting
 
 | Problem | Fix |
 | --- | --- |
-| `THREADS_ACCESS_TOKEN missing` | Add the token to `.env` |
-| `THREADS_MEDIA_IDS missing` | Add media IDs to `.env` |
-| 401 Unauthorized | Token expired. Generate a new one |
-| Empty results | The post may have no replies, or the token lacks `threads_read_replies` permission |
-| Rate limiting | Threads API has rate limits. Add delays between requests |
+| `THREADS_ACCESS_TOKEN missing` | Add token to `.env` |
+| `THREADS_MEDIA_IDS or THREADS_SEARCH_QUERIES missing` | Configure at least one lane |
+| Search only returns own posts | App lacks `threads_keyword_search` approval |
+| 401 Unauthorized | Token expired or invalid |
+| 403 Forbidden | Permission or app approval missing |
+| 429 Rate limit | Stop and retry later |
+| Empty search results | Query may be sensitive, too narrow, or no public matches |
 
 ---
 

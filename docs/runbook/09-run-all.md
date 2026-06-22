@@ -26,8 +26,8 @@ This runs every collector that has its env vars configured. Collectors missing t
   youtube: READY
   x: MISSING: ['X_BEARER_TOKEN']
   tiktok: MISSING: ['TIKTOK_RESEARCH_ACCESS_TOKEN', 'TIKTOK_VIDEO_IDS']
-  instagram: MISSING: ['INSTAGRAM_GRAPH_ACCESS_TOKEN', 'INSTAGRAM_MEDIA_IDS']
-  threads: MISSING: ['THREADS_ACCESS_TOKEN', 'THREADS_MEDIA_IDS']
+  instagram: MISSING: ['INSTAGRAM_GRAPH_ACCESS_TOKEN']
+  threads: MISSING: ['THREADS_ACCESS_TOKEN']
   stockbit: MISSING: ['STOCKBIT_TARGET_URLS']
 
 --- collected ---

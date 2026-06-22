@@ -9,9 +9,20 @@ Use this directory for strategy, architecture, data contracts, research, approva
 1. `architecture.md` — system overview.
 2. `collector-strategy.md` — cheapest-first source plan.
 3. `human-approval-checklist.md` — current approvals and risk gates.
-4. `data-contract.md` — canonical normalized item reference.
+4. `data-contract.md` — canonical normalized item reference and collection schemas.
 5. `provider-decision-matrix.md` — source/API/vendor tradeoffs.
 6. `labeling-guideline.md` — sentiment labeling rules.
+
+## Runbooks
+
+| Runbook | Use |
+| --- | --- |
+| `runbook/00-prerequisites.md` | Setup and config |
+| `runbook/01-google-play.md` | Google Play collection |
+| `runbook/02-app-store.md` | App Store collection |
+| `runbook/03-youtube.md` | YouTube collection |
+| `runbook/11-docker-mongodb.md` | Local MongoDB |
+| `runbook/12-backfill-retention.md` | Historical backfill with checkpoints |
 
 ## Research docs
 
