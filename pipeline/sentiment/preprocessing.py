@@ -9,6 +9,10 @@ Two modes:
 
 IndoBERT was pre-trained on formal Indonesian. Slang normalization is critical.
 Stopword removal and stemming HURT IndoBERT performance — skip them for that mode.
+
+Libraries used:
+  - NLTK: Indonesian stopword list (758 words, corpus-based)
+  - Sastrawi: Indonesian stemmer (rule-based suffix/prefix stripping)
 """
 
 import re
@@ -33,17 +37,16 @@ SLANG_MAP: dict[str, str] = {
     "dong": "saja", "sih": "saja",
     "klo": "kalau", "kalo": "kalau", "kl": "kalau",
     "tp": "tapi", "tpi": "tapi",
-    "sm": "sama", "sama": "sama",
-    "gw": "saya", "gue": "saya", "ane": "saya", "gw": "saya",
+    "sm": "sama",
+    "gw": "saya", "gue": "saya", "ane": "saya",
     "lu": "kamu", "lo": "kamu", "loe": "kamu",
     "dr": "dari", "dri": "dari",
     "pd": "pada",
-    "bs": "bisa", "bisa": "bisa",
+    "bs": "bisa",
     "udh": "sudah", "udah": "sudah", "sdh": "sudah",
-    "lg": "lagi", "lgi": "lagi", "lagi": "lagi",
+    "lg": "lagi", "lgi": "lagi",
     "dgn": "dengan", "dg": "dengan",
     "krn": "karena", "karna": "karena",
-    "klo": "kalau", "kalo": "kalau",
     # app-specific (BNI/BIONS)
     "login": "masuk", "log in": "masuk",
     "loading": "memuat", "ld": "memuat",
@@ -83,10 +86,6 @@ SENTIMENT_KEEPERS = {
     "sekali", "sangat", "amat", "paling",
 }
 
-# Repeated character normalization map
-REPEAT_MAP = {
-    "k": 2, "s": 2, "t": 2, "p": 2, "l": 2, "b": 2, "g": 2,
-}
 
 # ---------------------------------------------------------------------------
 # 2. CLEANING
@@ -183,164 +182,40 @@ def normalize_unicode(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 4. STOPWORD REMOVAL
+# 4. STOPWORD REMOVAL (NLTK-backed)
 # ---------------------------------------------------------------------------
 
-# Curated Indonesian stopword list (Sastrawi base + sentiment-domain additions)
-# fmt: off
-INDONESIAN_STOPWORDS: set[str] = {
-    # Sastrawi default set
-    "ada", "adalah", "adanya", "adapun", "agak", "agaknya", "agar",
-    "akan", "akankah", "akhir", "akhiri", "akhirnya", "aku", "akulah",
-    "amat", "amatlah", "anda", "andalah", "antar", "antara",
-    "antaranya", "apa", "apaan", "apabila", "apakah", "apalagi",
-    "apatah", "atau", "ataukah", "atauserta", "atau", "aya",
-    "bagaimana", "bagaimanakah", "bagaimanapun", "bagi", "bagian",
-    "bahawa", "bahwasannya", "bahwasanya", "baik", "baiklah",
-    "bakal", "bakalan", "balik", "banyak", "banyaknya",
-    "baru", "barulah", "bawah", "begini", "beginian", "beginikah",
-    "beginilah", "begitu", "begitukah", "begitulah", "begitupun",
-    "bekerja", "belakangan", "belum", "belumlah", "benar",
-    "benarkah", "benarlah", "berada", "berarti", "berawal",
-    "berbagai", "berdatangan", "beri", "berikan", "berikut",
-    "berikutnya", "berkali-kali", "berkata", "berkehendak",
-    "berkenaan", "berlalu", "berlangsung", "berlebihan", "bermacam",
-    "bermacam-macam", "bermaksud", "bermula", "bersama", "bersama-sama",
-    "bersiap", "bersiap-siap", "bertanya", "berturut", "berturut-turut",
-    "berupa", "berbagai", "besar", "besarnya", "beta",
-    "bilamana", "bila", "bilakah", "bisa", "bisakah",
-    "boleh", "bolehkah", "bolehlah", "buat", "bukan",
-    "bukankah", "bukanlah", "bukannya", "bulan", "bung",
-    # common function words
-    "dahulu", "dalam", "dan", "dapat", "dari", "daripd",
-    "datang", "dekat", "demikian", "demikianlah", "dan", "dengan",
-    "di", "dia", "diakhir", "diakhirinya", "dialah", "diantara",
-    "diantaranya", "diberi", "diberikan", "diberikannya",
-    "didapat", "digunakan", "digunakan", "dijadikan", "dikatakan",
-    "dikarenakan", "dilakukan", "dilalui", "dilihat",
-    "dimaksud", "dimaksudkan", "dimiliki", "dimiliki",
-    "diperlukan", "dipergunakan", "diplih", "ditanya",
-    "ditanyai", "ditempuh", "ditinggalkan", "ditunjuk",
-    "ditunjukkan", "ditunjuki", "diturunkan", "diyakini",
-    "dulu", "dulu", "eh", "enak", "enggak",
-    "entah", "entahlah",
-    "hal", "hampir", "hanya", "hanyalah", "harus",
-    "haruslah", "harusnya", "helo", "hingga", "hingganya",
-    "hp", "hu", "ia", "ialah", "ibarat", "ibaratkan",
-    "ibaratnya", "ikut", "ilustrasi", "ini", "inikah",
-    "inilah", "itu", "itukah", "itulah",
-    "jangan", "jangankan", "janganlah", "jika", "jikalau",
-    "juga", "jugakah", "jugalah", "jujur", "justru",
-    "kami", "kamilah", "kamu", "kamulah", "kan",
-    "kapan", "kapankah", "kapanpun", "karena", "karenanya",
-    "kasih", "kata", "katakan", "katakanlah", "ke", "kedua",
-    "keduanya", "kelak", "kelihatan", "kelihatannya", "kelima",
-    "keluar", "kembali", "kemudian", "kemudianlah", "kena",
-    "kenapa", "kepada", "kepadanya", "kerap", "kerap kali",
-    "keseluruhan", "keseluruhannya", "ketika", "khawatir",
-    "kini", "kinilah", "kira", "kira-kira", "kiranya",
-    "kisah", "kl", "km", "knapa", "ko", "kok",
-    "kurang", "kurangnya",
-    "lagi", "lagian", "lah", "lain", "lainnya", "lalu",
-    "lanjut", "lanjutnya", "lebih", "lebih-lebih", "lewat",
-    "lg", "lgsg", "lihat", "lho", "loh",
-    "lo", "lu",
-    "maka", "makanya", "makin", "malah", "malahan",
-    "mampu", "mampukah", "mana", "manakala", "manalagi",
-    "manis", "masa", "masalah", "masalahnya", "masing",
-    "masing-masing", "mau", "maukah", "melainkan",
-    "melakukan", "melalui", "melihat", "menjadi",
-    "menjadi", "mendatang", "mengapa", "mengenai",
-    "mengerjakan", "mengetahui", "menggunakan", "menghancurkan",
-    "mengingat", "mengingatkan", "menginginkan", "mengucapkan",
-    "mengundang", "menjadi", "menjelang", "menunjuk",
-    "menunjukkan", "menyatakan", "menyediakan", "menyukai",
-    "merasa", "mereka", "mereka", "merupakan",
-    "meski", "meskipun", "meyakini", "meyakinkan",
-    "minta", "mirip", "misal", "misalkan", "misalnya",
-    "mohon", "mohon", "mu", "mulai", "mulailah",
-    "mulanya", "mungkin", "mungkinkah", "musim",
-    "masing", "nanti", "nantinya", "nah", "naik",
-    "nantinya", "new", "nggak", "nggak", "nobody",
-    "nomor", "nomor", "ny", "nyaris",
-    "oleh", "olehnya", "pada", "padahal", "padanya",
-    "pak", "paling", "panjang", "pantas",
-    "para", "para", "parameter", "paska", "pasca",
-    "pasti", "pastilah", "peka", "penuh", "per",
-    "perlu", "perlukah", "perlu", "pernah", "pernah",
-    "persoalan", "pertama", "pertama-tama", "pertama",
-    "pertanyaan", "pertanyakan", "pihak", "pihaknya",
-    "pula", "pun", "punya",
-    "ragu", "rasa", "rasanya", "resmi",
-    "ria", "risau", "rupa", "rupanya",
-    "saat", "saatnya", "saja", "sajalah", "saling",
-    "sama", "sama-sama", "sambil", "sampai",
-    "sampai-sampai", "sampaikan", "sana", "sangat",
-    "sangatlah", "saya", "sayalah", "sebab",
-    "sebabnya", "sebagai", "sebagaimana", "sebagainya",
-    "sebaik", "sebaik-baiknya", "sebaiknya", "sebaliknya",
-    "sebanyak", "sebegini", "sebegitu", "sebelum",
-    "sebelumnya", "sebenarnya", "seberapa", "sebesar",
-    "sebetulnya", "sebidang", "seblum", "sedang",
-    "sedangkan", "sedemikian", "sedikit", "sedikitnya",
-    "segala", "segalanya", "segera", "segeralah",
-    "segmen", "seharusnya", "sehingga", "seingat",
-    "sejauh", "sejenak", "sejumlah", "sekadar",
-    "sekadarnya", "sekali", "sekalian", "sekaligus",
-    "sekalipun", "sekian", "sekian-kalinya", "sekitar",
-    "sekitarnya", "sekurang-kurangnya", "sekurangnya",
-    "sela", "selagi", "selain", "selainnya", "selalu",
-    "selama", "selama-lamanya", "selanjutnya", "seluruh",
-    "seluruhnya", "semacam", "semakin", "semampai",
-    "semau", "sementara", "semestinya", "semouga",
-    "semua", "semuanya", "semula", "sendiri",
-    "sendirian", "sendirinya", "seorang", "seoraang",
-    "sepanjang", "sepantun", "seperti", "sepertinya",
-    "sepihak", "seram", "serang", "serangkaian",
-    "serius", "serta", "serupa", "sesaat",
-    "sesama", "sesampai", "sesegera", "sesekali",
-    "seseorang", "sesuatu", "sesuatunya", "sesudah",
-    "sesudahnya", "setelah", "setempat", "setengah",
-    "seterusnya", "setiap", "setibanya", "setidak-tidaknya",
-    "setidaknya", "setinggi", "seusai", "sewaktu",
-    "siap", "siapa", "siapakah", "siapapun",
-    "sini", "sinilah", "soal", "soalnya", "solusi",
-    "suatu", "sudah", "sudahkah", "sudahlah",
-    "supaya", "sy", "sye", "ta", "tadi",
-    "tadinya", "tahu", "tahun", "tak",
-    "talam", "tama", "tamat", "tanda", "tandas",
-    "tangan", "tangannya", "tapi", "tapi", "tatkala",
-    "tegas", "tegaskan", "telah", "tempoh", "tentang",
-    "tentu", "tentulah", "tentunya", "tepat",
-    "tepatnya", "terasa", "terbagi", "terdahulu",
-    "terdapat", "terdiri", "terhadap", "terhadapnya",
-    "terjadi", "terjadilah", "terjadinya", "terkira",
-    "terlalu", "terlebih", "terlihat", "termasuk",
-    "ternyata", "tersampaikan", "tersebut", "tersebutlah",
-    "tertentu", "tertuju", "terus", "terutama",
-    "tertentu", "tetapi", "tiap", "tiba",
-    "tiba-tiba", "timbul", "tinggal", "tinggal",
-    "toh", "turut", "turut",
-    "tutur", "tuturnya",
-    "ucap", "ucapnya", "ufti", "uh",
-    "untuk", "untuknya", "usah", "usai",
-    "waduh", "wah", "wahai", "waktu", "waktunya",
-    "walau", "walaupun", "walhasil", "wang", "wanita",
-    "wow",
-    "ya", "yaitu", "yakin", "yakni", "yang",
-    "yong",
-}
-# fmt: on
+_nltk_stopwords: set[str] | None = None
 
-# Remove sentiment-bearing words from stopwords
-INDONESIAN_STOPWORDS -= SENTIMENT_KEEPERS
+
+def _get_stopwords() -> set[str]:
+    """Load Indonesian stopwords from NLTK corpus. Cached after first call.
+
+    Falls back to Sastrawi's stopword list if NLTK is unavailable.
+    """
+    global _nltk_stopwords
+    if _nltk_stopwords is not None:
+        return _nltk_stopwords
+
+    try:
+        import nltk
+        nltk.download("stopwords", quiet=True)
+        from nltk.corpus import stopwords
+        _nltk_stopwords = set(stopwords.words("indonesian"))
+    except Exception:
+        # Fallback: Sastrawi stopword list
+        from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
+        _nltk_stopwords = set(StopWordRemoverFactory().get_stop_words())
+
+    return _nltk_stopwords
 
 
 def remove_stopwords(text: str, extra_keep: set[str] | None = None) -> str:
-    """Remove Indonesian stopwords, keeping sentiment-bearing words."""
+    """Remove Indonesian stopwords (NLTK corpus), keeping sentiment-bearing words."""
+    stopwords = _get_stopwords()
     keep = SENTIMENT_KEEPERS | (extra_keep or set())
     words = text.split()
-    return " ".join(w for w in words if w in keep or w not in INDONESIAN_STOPWORDS)
+    return " ".join(w for w in words if w in keep or w not in stopwords)
 
 
 # ---------------------------------------------------------------------------
@@ -381,7 +256,7 @@ def preprocess(
 ) -> str:
     """Full preprocessing pipeline.
 
-    mode="rule_based":  clean → normalize → stopwords → stemming
+    mode="rule_based":  clean → normalize → stopwords (NLTK) → stemming (Sastrawi)
     mode="indobert":    clean → normalize only (tokenizer handles the rest)
 
     Args:
@@ -389,7 +264,7 @@ def preprocess(
         mode: "rule_based" for classical NLP, "indobert" for transformer input
         remove_nums: whether to strip numbers
         do_stemming: whether to apply Sastrawi stemmer (rule_based only)
-        do_stopwords: whether to remove stopwords (rule_based only)
+        do_stopwords: whether to remove stopwords (rule_based only, NLTK-backed)
         extra_keep_words: additional words to preserve from stopword removal
     """
     if not text or not text.strip():
@@ -458,8 +333,8 @@ def extract_features(text: str) -> dict:
         "avg_word_length": sum(len(w) for w in words) / max(len(words), 1),
         "unique_words": len(set(words)),
         "has_negation": bool({"tidak", "bukan", "belum", "jangan", "kurang"} & set(words)),
-        "has_positive": bool(SENTIMENT_KEEPERS & {"bagus", "mantap", "puas", "lancar", "cepat", "mudah"} & set(words)),
-        "has_negative": bool(SENTIMENT_KEEPERS & {"buruk", "jelek", "parah", "gagal", "lemot", "susah"} & set(words)),
+        "has_positive": bool({"bagus", "mantap", "puas", "lancar", "cepat", "mudah"} & set(words)),
+        "has_negative": bool({"buruk", "jelek", "parah", "gagal", "lemot", "susah"} & set(words)),
         "exclamation_count": text.count("!"),
         "question_count": text.count("?"),
         "repeated_char_count": len(re.findall(r"(.)\1", text)),

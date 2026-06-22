@@ -30,6 +30,7 @@ indobert = [
   "torch>=2.0",
   "transformers>=4.30",
   "Sastrawi>=202311.2",
+  "nltk>=3.8",
 ]
 
 [tool.setuptools.packages.find]

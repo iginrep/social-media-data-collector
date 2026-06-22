@@ -27,7 +27,6 @@ from pipeline.sentiment.preprocessing import (
     # constants
     SLANG_MAP,
     SENTIMENT_KEEPERS,
-    INDONESIAN_STOPWORDS,
 )
 
 pytestmark = pytest.mark.unit
