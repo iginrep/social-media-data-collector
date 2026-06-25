@@ -215,22 +215,43 @@ class YouTubeAdapter:
     def collect(self, keyword: str, target_entity: str, limit: int = 50) -> list[RawSocialItem]:
         video_items: list[RawSocialItem] = []
         for channel_url in self.channel_urls:
-            channel_id = self.resolve_channel_id(channel_url)
-            response = self.client.get(YOUTUBE_RSS_URL.format(channel_id=channel_id))
-            if response.status_code in {401, 403, 429}:
-                raise CollectorStopped(f"youtube rss stopped: status {response.status_code}")
-            response.raise_for_status()
-            video_items.extend(parse_youtube_feed(response.text, keyword=keyword, target_entity=target_entity))
-            if len(video_items) >= limit:
-                break
+            try:
+                channel_id = self.resolve_channel_id(channel_url)
+                response = self.client.get(YOUTUBE_RSS_URL.format(channel_id=channel_id))
+                if response.status_code in {401, 403, 429}:
+                    raise CollectorStopped(f"youtube rss stopped: status {response.status_code}")
+                response.raise_for_status()
+                video_items.extend(parse_youtube_feed(response.text, keyword=keyword, target_entity=target_entity))
+            except Exception as e:
+                print(f"Error fetching RSS for {channel_url}: {e}")
+                continue
+
+        # Sort video items by publication date descending so we scan the newest videos first
+        tz_utc = timezone.utc
+        video_items.sort(key=lambda x: x.posted_at or datetime.min.replace(tzinfo=tz_utc), reverse=True)
+
         api_key = _load_env_value("YOUTUBE_API_KEY")
         if not api_key:
             return video_items[:limit]
+
         comments: list[RawSocialItem] = []
-        for video in video_items:
-            comments.extend(self.collect_comments(video.source_id, keyword=keyword, target_entity=target_entity, limit=max(1, limit - len(comments)), api_key=api_key))
+        # Limit to checking the newest 10 videos overall to conserve API quota/budget
+        for video in video_items[:10]:
+            try:
+                fetched_comments = self.collect_comments(
+                    video.source_id,
+                    keyword=keyword,
+                    target_entity=target_entity,
+                    limit=max(1, limit - len(comments)),
+                    api_key=api_key
+                )
+                comments.extend(fetched_comments)
+            except Exception as e:
+                print(f"Error collecting comments for video {video.source_id}: {e}")
+                
             if len(comments) >= limit:
                 break
+
         return comments[:limit] or video_items[:limit]
 
     def collect_backfill(
